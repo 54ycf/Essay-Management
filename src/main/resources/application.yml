@@ -1,0 +1,36 @@
+# Tomcat
+server:
+  tomcat:
+    uri-encoding: UTF-8
+  port: 8080
+
+
+logging:
+  file:
+    path: log
+  level:
+    com:
+      ecnu:
+        dao: debug
+  logback:
+    rollingpolicy:
+      max-history: 30
+
+
+spring:
+  # 使用dev环境
+  profiles:
+    active: dev
+  # jackson时间格式化，但是好像没有生效，我只有再bean中自己配置
+  jackson:
+    time-zone: GMT+8
+    date-format: yyyy-MM-dd HH:mm:ss
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 10MB
+      enabled: true
+  mvc:
+    throw-exception-if-no-handler-found: true
+
+web-storage-root: http://${my-web-domain}:${server.port}/file

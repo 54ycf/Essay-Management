@@ -1,0 +1,202 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ecnu.dao.EssayDao">
+
+    <select id="listEssayItems" parameterType="com.ecnu.vo.query.EssayQuery" resultType="com.ecnu.vo.EssayItemVo">
+        select *
+        from `essay` natural join `user`
+        <if test="branchId != null">natural join `branch`</if>
+        <if test="branchId == null and groupId != null">natural join `branch` natural join `group`</if>
+        <if test="branchId == null and groupId == null and classificationId != null">natural join `branch` natural join `group` natural join `classification`</if>
+        <where>
+            and `essay`.`deleted` = false
+            <if test="indices != null and indices.size()>0">
+                and `essay_id` in
+                <foreach collection="indices" index="index" item="item" open="(" close=")" separator=",">
+                    #{item}
+                </foreach>
+            </if>
+            <if test="essayType != null and essayType != '' "> and `essay_type` = #{essayType}</if>
+            <if test="author != null and author != '' "> and `author` = #{author}</if>
+            <if test="ownerName != null and ownerName != '' "> and `username` = #{ownerName}</if>
+            <if test="userId != null">and user_id = #{userId}</if>
+            <if test="createTime != null"> and date_format(`create_time`, '%Y-%m') = date_format(#{createTime},'%Y-%m')</if>
+            <if test="branchId != null"> and `branch_id` = #{branchId}</if>
+            <if test="branchId == null and groupId != null"> and `group_id` = #{groupId}</if>
+            <if test="branchId == null and groupId == null and classificationId != null"> and `classification_id` = #{classificationId}</if>
+        </where>
+        <if test="indices != null and indices.size()>0">
+            order by field(essay_id,
+            <foreach collection="indices" separator="," item="item">
+                #{item}
+            </foreach>)/*按照ES给的相关性排序*/
+        </if>
+    </select>
+
+    <select id="getEssayDetail" parameterType="Long" resultType="com.ecnu.vo.EssayVo">
+        select `essay`.*, `user`.`username`
+        from `essay` natural join `user`
+        where `essay_id` = #{essayId}
+        and `essay`.`deleted` = false
+    </select>
+
+    <select id="listEssayReferences" resultType="java.util.Map">
+        select `title`,`reference_id` as `essay_id`
+        from `essay` join `essay_reference` on `essay`.`essay_id` = `essay_reference`.reference_id
+        where `essay_reference`.`essay_id` = #{essayId}
+        and `essay`.`deleted` = false
+    </select>
+
+    <!--这些都是为了嵌套获取所有的三级分类-->
+    <resultMap id="findAllDirections" type="com.ecnu.vo.DirectionVo">
+        <id property="value" column="classification_id"/>
+        <result property="label" column="label1"/>
+        <collection property="children" column="classification_id" javaType="java.util.List" ofType="com.ecnu.vo.DirectionVo" select="listAllGroups"/>
+    </resultMap>
+    <resultMap id="findAllGroups" type="com.ecnu.vo.DirectionVo">
+        <id property="value" column="group_id"/>
+        <result property="label" column="label2"/>
+        <collection property="children" column="group_id" javaType="java.util.List" ofType="com.ecnu.vo.DirectionVo" select="listAllBranches"/>
+    </resultMap>
+    <resultMap id="findAllBranches" type="com.ecnu.vo.DirectionVo">
+        <id property="value" column="branch_id"/>
+        <result property="label" column="label3"/>
+    </resultMap>
+    <select id="listAllDirections" resultMap="findAllDirections">
+        select *
+        from `classification`
+        where `deleted`=false
+    </select>
+    <select id="listAllGroups" resultMap="findAllGroups" parameterType="Long">
+        select *
+        from `group`
+        where `classification_id` = #{classification_id}
+        and `deleted`=false
+    </select>
+    <select id="listAllBranches" resultMap="findAllBranches" parameterType="Long">
+        select *
+        from `branch`
+        where `group_id` = #{group_id}
+        and `deleted`=false
+    </select>
+
+    <select id="listTitlesByKey" resultType="java.util.Map">
+        select `title`,`essay_id` as `essayId`
+        from `essay`
+        where `title` like concat('%',#{key},'%')
+        and `deleted`=false
+        limit 10
+    </select>
+
+    <select id="isEssayDeleted" parameterType="Long" resultType="java.lang.Boolean">
+        select `deleted`
+        from `essay`
+        where `essay_id`=#{essayId}
+    </select>
+
+    <select id="getOwnerId" parameterType="Long" resultType="Long">
+        select `user_id`
+        from `essay`
+        where `essay_id`=#{essayId}
+    </select>
+
+    <select id="listUserEssayGroups" parameterType="Long" resultType="java.util.Map">
+        select label3 `name`,count(label3) `value`
+        from essay natural join branch
+        where user_id=#{userId}
+        group by label3
+        order by count(label3) desc
+    </select>
+
+    <select id="getLastSixMonthEssay" parameterType="Long" resultType="java.util.Map">
+        SELECT t1.datetime as name, IFNULL(t2.num, 0) as value FROM (
+                SELECT DATE_FORMAT(CURDATE(), '%Y-%m') AS datetime
+                union all
+                SELECT DATE_FORMAT((CURDATE() - INTERVAL 1 MONTH), '%Y-%m') AS datetime
+                union all
+                SELECT DATE_FORMAT((CURDATE() - INTERVAL 2 MONTH), '%Y-%m') AS datetime
+                union all
+                SELECT DATE_FORMAT((CURDATE() - INTERVAL 3 MONTH), '%Y-%m') AS datetime
+                union all
+                SELECT DATE_FORMAT((CURDATE() - INTERVAL 4 MONTH), '%Y-%m') AS datetime
+                union all
+                SELECT DATE_FORMAT((CURDATE() - INTERVAL 5 MONTH), '%Y-%m') AS datetime
+            ) t1 LEFT JOIN (
+            SELECT LEFT(create_time, 7) AS datetime, COUNT(0) AS num
+            FROM essay where user_id=#{userId}
+            GROUP BY LEFT(create_time, 7) ORDER BY datetime DESC LIMIT 6
+        ) t2 ON t1.datetime = t2.datetime ORDER BY t1.datetime DESC
+    </select>
+
+
+
+
+    <insert id="addEssay" parameterType="com.ecnu.vo.EssayUploadVo" useGeneratedKeys="true" keyProperty="essayId">
+        insert into essay(`title`, `author`, `publish_date`, `user_id`, `branch_id`, `essay_link`, `essay_type`, `create_time`, `attachment`)
+        values(#{title}, #{author}, #{publishDate}, #{userId},  #{branchId}, #{essayLink}, #{essayType}, #{createTime}, #{attachment})
+    </insert>
+
+    <insert id="addReferenceIds" parameterType="com.ecnu.vo.EssayUploadVo">
+        insert into `essay_reference`(`essay_id`, `reference_id`)
+        values
+        <foreach collection="referenceIds" item="item" index="index" separator=",">
+            (
+                #{essayId},
+                #{item}
+            )
+        </foreach>
+    </insert>
+
+
+
+
+    <update id="updateEssay" parameterType="com.ecnu.vo.EssayUploadVo">
+        update `essay`
+        set
+        `title`=#{title}, `author`=#{author},
+        `publish_date`=#{publishDate}, `branch_id`=#{branchId},
+        `essay_link`=#{essayLink}, `essay_type`=#{essayType},`attachment`=#{attachment}
+        where `essay_id` = #{essayId}
+    </update>
+
+
+
+    <delete id="deleteReferenceIds" parameterType="com.ecnu.vo.EssayUploadVo">
+        delete from `essay_reference`
+        where `essay_id`=#{essayId}
+    </delete>
+
+    <update id="deleteEssay" parameterType="Long">
+        update `essay`
+        set
+        `deleted` = true
+        where `essay_id`=#{essayId}
+    </update>
+
+
+    <update id="updateDirection" parameterType="com.ecnu.vo.DirectionManageVo">
+        <if test="classificationId!=null and groupId == null and branchId==null">
+            update classification set label1=#{name} where classification_id=#{classificationId}
+        </if>
+        <if test="classificationId==null and groupId != null and branchId==null">
+            update `group` set label2=#{name} where group_id=#{groupId}
+        </if>
+        <if test="classificationId!=null and groupId == null and branchId!=null">
+            update branch set label3 = #{name} where branch_id=#{branchId};
+        </if>
+    </update>
+
+    <update id="deleteDirection" parameterType="com.ecnu.vo.DirectionManageVo">
+        <if test="classificationId!=null and groupId == null and branchId==null">
+            update classification set deleted=true where classification_id=#{classificationId}
+        </if>
+        <if test="classificationId==null and groupId != null and branchId==null">
+            update `group` set deleted=true where group_id=#{groupId}
+        </if>
+        <if test="classificationId==null and groupId == null and branchId!=null">
+            update branch set deleted=true where branch_id=#{branchId};
+        </if>
+    </update>
+</mapper>

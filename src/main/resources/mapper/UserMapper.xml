@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ecnu.dao.UserDao">
+
+
+
+    <select id="count" resultType="long">
+        select count(*) from user where deleted = 0;
+    </select>
+
+    <select id="queryUser" resultType="com.ecnu.vo.UserVo" parameterType="com.ecnu.vo.query.UserQuery">
+        select * from user
+        <where>
+            <if test="username != null and username!='' ">
+                AND username like concat('%',#{username},'%')
+            </if>
+            <if test="userId != null">
+                AND user_id = #{userId}
+            </if>
+            <if test="role != null and role!='' ">
+                AND role like #{role}
+            </if>
+            <if test="deleted != null">
+                AND deleted = #{deleted}
+            </if>
+        </where>
+    </select>
+
+
+
+    <insert id="addUser" parameterType="com.ecnu.pojo.User" useGeneratedKeys="true" keyProperty="userId">
+        insert into user(username, password, salt, real_name, email)
+        values(#{username}, #{password}, #{salt}, #{realName}, #{email})
+    </insert>
+
+    <select id="isUsernameExist" parameterType="String" resultType="boolean">
+        select count(0) from user
+        where username=#{username}
+        limit 1
+    </select>
+
+    <select id="findUserById" parameterType="Long" resultType="com.ecnu.pojo.User">
+        select * from user where user_id=#{userId} and deleted = 0
+    </select>
+
+    <select id="findUserByName" parameterType="String" resultType="com.ecnu.pojo.User">
+        select * from user where username=#{username} and deleted = 0
+    </select>
+
+
+
+    <update id="updatePwd" parameterType="com.ecnu.pojo.User">
+        update user
+        set password=#{password},salt=#{salt}
+        where user_id=#{userId}
+    </update>
+
+    <update id="updateUserDeleted" parameterType="com.ecnu.pojo.User">
+        update user set deleted=#{deleted}
+        where user_id=#{userId}
+    </update>
+
+</mapper>

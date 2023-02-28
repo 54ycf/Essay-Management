@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ecnu.dao.CommentDao">
+
+    <select id="getById" resultType="com.ecnu.pojo.Comment" parameterType="Long">
+        select * from comment where comment_id = #{comment_id} and deleted = 0;
+    </select>
+
+    <select id="listComment" resultType="com.ecnu.pojo.Comment">
+        select * from comment where deleted = 0;
+    </select>
+
+    <select id="queryComment" resultType="com.ecnu.vo.CommentManageVo" parameterType="com.ecnu.vo.query.CommentQuery">
+        select * from comment natural join user
+        <where>
+            <if test="essayId != null">and essay_id = #{essayId}</if>
+            <if test="username != null and username!='' ">and username like concat('%',#{username},'%')</if>
+            <if test="deleted != null">and deleted = #{deleted}</if>
+            <if test="createTime != null">and date_format(`create_time`, '%Y-%m') = date_format(#{createTime},'%Y-%m')</if>
+        </where>
+    </select>
+
+
+    <insert id="addComment" parameterType="com.ecnu.pojo.Comment" useGeneratedKeys="true" keyProperty="commentId">
+        insert into comment(essay_id, user_id, root_comment_id, parent_comment_id, content, create_time, deleted)
+        values(#{essayId}, #{userId}, #{rootCommentId}, #{parentCommentId}, #{content}, now(), 0);
+    </insert>
+
+    <select id="isCommentExists" parameterType="Long" resultType="boolean">
+        select count(*) from comment where comment_id = #{commentId} and deleted = 0;
+    </select>
+
+    <update id="updateCommentDeleted" parameterType="com.ecnu.pojo.Comment">
+        update comment set deleted = #{deleted} where comment_id = #{commentId};
+    </update>
+
+
+    <select id="listCommentsByEssayId" resultMap="listCommentMap">
+        select * from comment natural join user where essay_id = #{essayId} and root_comment_id is null
+    </select>
+    <resultMap id="listCommentMap"  type="com.ecnu.vo.CommentVo">
+        <id property="commentId" column="comment_id"/>
+        <result property="content" column="content"/>
+        <result property="userId" column="user_id"/>
+        <result property="time" column="create_time"/>
+        <result property="essayId" column="essay_id"/>
+        <result property="username" column="username"/>
+        <collection property="children" column="rootId=comment_id" javaType="java.util.List" ofType="com.ecnu.vo.CommentVo" select="listChildrenComment"/>
+    </resultMap>
+    <select id="listChildrenComment" resultMap="listChildrenCommentMap">
+        SELECT t.user_id,t.comment_id,t.essay_id,t.root_comment_id,t.parent_comment_id,t.content,t.create_time,t.username,user.username AS pname
+        FROM(
+            SELECT user_id,comment_id,essay_id,root_comment_id,parent_comment_id,content,create_time,username
+            FROM `comment` NATURAL JOIN `user` where root_comment_id=#{rootId}
+        ) AS t
+        JOIN `comment` ON t.parent_comment_id = comment.comment_id
+        JOIN `user` ON `comment`.user_id = `user`.user_id
+    </select>
+    <resultMap id="listChildrenCommentMap" type="com.ecnu.vo.CommentVo">
+        <id property="commentId" column="comment_id"/>
+        <result property="content" column="content"/>
+        <result property="userId" column="user_id"/>
+        <result property="time" column="create_time"/>
+        <result property="pid" column="parent_comment_id"/>
+        <result property="pname" column="pname"/>
+        <result property="originId" column="root_comment_id"/>
+        <result property="essayId" column="essay_id"/>
+        <result property="username" column="username"/>
+    </resultMap>
+</mapper>
